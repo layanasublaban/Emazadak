@@ -5,10 +5,8 @@ import { FacebookIcon, InstagramIcon, LinkedinIcon, TwitterIcon } from './Icons'
 const pages = [
   { label: 'Home', to: '/' },
   { label: 'Auctions', to: '/auctions' },
-  { label: 'Live Bidding', to: '/live-bidding' },
-  { label: 'Direct Offers', to: '/offers' },
-  { label: 'Map', to: '/map' },
-  { label: 'List Property', to: '/list-property' },
+  { label: 'LiveBidding', to: '/auctions' },
+  { label: 'Auction Map', to: '/map' },
 ]
 
 export function Footer() {
