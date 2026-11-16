@@ -1,0 +1,9 @@
+{
+  "title": "Emazadak",
+  "description": "A clean, blank white page for anyone who needs a simple, uncluttered space to view or begin their work.",
+  "language": "en",
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": true
+  }
+}
