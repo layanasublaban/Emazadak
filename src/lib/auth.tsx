@@ -1,3 +1,4 @@
+import { api, ApiError, userToken } from '@/lib/api'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 export interface User {
@@ -14,127 +15,101 @@ export interface User {
   createdAt: number
   /** Identity verification status (demo: becomes "pending" after sign up). */
   verification: 'unverified' | 'pending' | 'verified'
+  suspended?: boolean
 }
 
 export interface SignUpInput extends Omit<User, 'id' | 'createdAt' | 'verification'> {
   password: string
 }
 
+export interface MyState {
+  deposits: string[]
+  bids: { id: number; auctionId: string; amount: number; at: number; cancelled: boolean }[]
+  offers: { id: number; auctionId: string; amount: number; status: string; at: number }[]
+  submissions: { id: string; status: string; reason?: string | null; at: number; title?: string }[]
+  transactions: { id: number; auctionId: string; type: string; amount: number; status: string; at: number }[]
+}
+const emptyState: MyState = { deposits: [], bids: [], offers: [], submissions: [], transactions: [] }
+
+type Result = { ok: true } | { ok: false; error: string }
 interface AuthState {
   user: User | null
   loggedIn: boolean
-  signIn: (email: string, password: string, remember: boolean) => Promise<{ ok: true } | { ok: false; error: string }>
-  signUp: (input: SignUpInput) => Promise<{ ok: true } | { ok: false; error: string }>
+  /** The signed-in user's deposits / bids / offers / submissions (from the server). */
+  state: MyState
+  refresh: () => Promise<void>
+  signIn: (email: string, password: string, remember: boolean) => Promise<Result>
+  signUp: (input: SignUpInput) => Promise<Result>
   logout: () => void
-}
-
-const USERS_KEY = 'emazadak.users'
-const SESSION_KEY = 'emazadak.session'
-
-type Stored = User & { hash: string }
-
-const read = <T,>(storage: 'local' | 'session', key: string, fallback: T): T => {
-  try {
-    const s = storage === 'local' ? window.localStorage : window.sessionStorage
-    const raw = s.getItem(key)
-    return raw ? (JSON.parse(raw) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
-const write = (storage: 'local' | 'session', key: string, value: unknown) => {
-  try {
-    const s = storage === 'local' ? window.localStorage : window.sessionStorage
-    s.setItem(key, JSON.stringify(value))
-  } catch {
-    /* storage unavailable (private mode) */
-  }
-}
-const remove = (key: string) => {
-  try {
-    window.localStorage.removeItem(key)
-    window.sessionStorage.removeItem(key)
-  } catch {
-    /* ignore */
-  }
-}
-
-async function hashPassword(pw: string): Promise<string> {
-  try {
-    const data = new TextEncoder().encode(`emazadak:${pw}`)
-    const buf = await crypto.subtle.digest('SHA-256', data)
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
-  } catch {
-    return `plain:${pw}`
-  }
 }
 
 const AuthContext = createContext<AuthState>({
   user: null,
   loggedIn: false,
+  state: emptyState,
+  refresh: async () => {},
   signIn: async () => ({ ok: false, error: 'Auth unavailable' }),
   signUp: async () => ({ ok: false, error: 'Auth unavailable' }),
   logout: () => {},
 })
 
-/**
- * Front-end auth for the public website (not the admin panel).
- * Accounts are kept in the browser (localStorage) until a real backend is connected:
- * replace signIn / signUp with API calls and keep the same shapes.
- */
+const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
+
+/** Website auth backed by the API (JWT in storage). Admin panel has its own session. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [state, setState] = useState<MyState>(emptyState)
 
-  useEffect(() => {
-    const id = read<string | null>('local', SESSION_KEY, null) ?? read<string | null>('session', SESSION_KEY, null)
-    if (id) {
-      const found = read<Stored[]>('local', USERS_KEY, []).find((u) => u.id === id)
-      if (found) setUser(stripHash(found))
+  const refresh = useCallback(async () => {
+    if (!userToken.get()) return
+    try {
+      const r = await api<{ user: User } & Partial<MyState>>('/me/state')
+      setUser(r.user)
+      setState({ ...emptyState, ...r })
+    } catch (e) {
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) { setUser(null); setState(emptyState) }
     }
   }, [])
+
+  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    if (!user) return
+    const t = setInterval(() => void refresh(), 10_000)
+    return () => clearInterval(t)
+  }, [user, refresh])
 
   const signIn = useCallback<AuthState['signIn']>(async (email, password, remember) => {
-    const users = read<Stored[]>('local', USERS_KEY, [])
-    const found = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
-    if (!found || found.hash !== (await hashPassword(password))) return { ok: false, error: 'Incorrect email or password.' }
-    remove(SESSION_KEY)
-    write(remember ? 'local' : 'session', SESSION_KEY, found.id)
-    setUser(stripHash(found))
-    return { ok: true }
-  }, [])
-
-  const signUp = useCallback<AuthState['signUp']>(async ({ password, ...profile }) => {
-    const users = read<Stored[]>('local', USERS_KEY, [])
-    if (users.some((u) => u.email.toLowerCase() === profile.email.trim().toLowerCase()))
-      return { ok: false, error: 'An account with this email already exists.' }
-    if (users.some((u) => u.nationalId === profile.nationalId))
-      return { ok: false, error: 'This national ID is already registered.' }
-    const created: Stored = {
-      ...profile,
-      email: profile.email.trim(),
-      id: `U${Date.now()}`,
-      createdAt: Date.now(),
-      verification: 'pending',
-      hash: await hashPassword(password),
+    try {
+      const r = await api<{ token: string; user: User }>('/auth/signin', { body: { email, password }, auth: false })
+      userToken.set(r.token, remember)
+      setUser(r.user)
+      void refresh()
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: msg(e) }
     }
-    write('local', USERS_KEY, [...users, created])
-    remove(SESSION_KEY)
-    write('local', SESSION_KEY, created.id)
-    setUser(stripHash(created))
-    return { ok: true }
-  }, [])
+  }, [refresh])
+
+  const signUp = useCallback<AuthState['signUp']>(async (input) => {
+    try {
+      const r = await api<{ token: string; user: User }>('/auth/signup', { body: input, auth: false })
+      userToken.set(r.token, true)
+      setUser(r.user)
+      void refresh()
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: msg(e) }
+    }
+  }, [refresh])
 
   const logout = useCallback(() => {
-    remove(SESSION_KEY)
+    userToken.set(null)
     setUser(null)
+    setState(emptyState)
   }, [])
 
-  const value = useMemo(() => ({ user, loggedIn: !!user, signIn, signUp, logout }), [user, signIn, signUp, logout])
+  const value = useMemo(() => ({ user, loggedIn: !!user, state, refresh, signIn, signUp, logout }), [user, state, refresh, signIn, signUp, logout])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-function stripHash({ hash: _h, ...u }: Stored): User {
-  return u
 }
 
 export const useAuth = () => useContext(AuthContext)

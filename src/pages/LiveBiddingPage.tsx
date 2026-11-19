@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { auctions, formatMoney, type Auction } from '@/data/auctions'
 import { CountdownTimer } from '@/components/CountdownTimer'
 import { Footer } from '@/components/Footer'
@@ -9,6 +9,7 @@ import { LiveDot } from '@/components/LiveDot'
 import { useI18n } from '@/lib/i18n'
 import { Link, navigate } from '@/lib/router'
 import { useAuth } from '@/lib/auth'
+import { fetchBids, placeBid as bidNow } from '@/lib/actions'
 
 interface Activity {
   id: number
@@ -19,48 +20,59 @@ interface Activity {
   mine?: boolean
 }
 
-const liveOnes = auctions.filter((a) => a.status === 'live' || a.status === 'ending-soon').slice(0, 12)
-const bidders = ['••21', '••48', '••07', '••63', '••15', '••92']
-
-/** Live bidding room. Bids from other participants are simulated until the real-time backend is connected. */
+/** Live bidding room backed by the server: bids, counts and the activity feed come from the API (polled). */
 export default function LiveBiddingPage({ route }: { route: string }) {
-  const { loggedIn, user } = useAuth()
+  const { loggedIn, user, refresh } = useAuth()
   const { t, auction } = useI18n()
-  const [bids, setBids] = useState<Record<string, number>>(() => Object.fromEntries(liveOnes.map((a) => [a.id, a.currentBid])))
-  const [counts, setCounts] = useState<Record<string, number>>(() => Object.fromEntries(liveOnes.map((a) => [a.id, a.bids])))
+  const liveOnes = auctions.filter((a) => a.status === 'live' || a.status === 'ending-soon').slice(0, 12)
   const [feed, setFeed] = useState<Activity[]>([])
   const [flash, setFlash] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'ending'>('all')
   const [notice, setNotice] = useState('')
-  const seq = useRef(0)
-  const bidsRef = useRef(bids)
-  bidsRef.current = bids
+  const [busy, setBusy] = useState<string | null>(null)
+  const seen = useRef<Record<string, number>>({})
+  const ids = liveOnes.slice(0, 6).map((a) => a.id).join(',')
+  const sig = liveOnes.map((a) => `${a.id}:${a.currentBid}`).join(',')
 
-  const record = (a: Auction, amount: number, bidder: string, mine = false) => {
-    setBids((b) => ({ ...b, [a.id]: amount }))
-    setCounts((c) => ({ ...c, [a.id]: (c[a.id] ?? a.bids) + 1 }))
-    setFeed((f) => [{ id: ++seq.current, auctionId: a.id, amount, bidder, at: Date.now(), mine }, ...f].slice(0, 12))
-    setFlash(a.id)
-    setTimeout(() => setFlash((x) => (x === a.id ? null : x)), 1200)
-  }
-
-  // Simulated competing bids
+  // Flash a card when its price changes on the server
   useEffect(() => {
-    const id = setInterval(() => {
-      const a = liveOnes[Math.floor(Math.random() * liveOnes.length)]
-      record(a, (bidsRef.current[a.id] ?? a.currentBid) + a.minBidIncrement, bidders[Math.floor(Math.random() * bidders.length)])
-    }, 4500)
-    return () => clearInterval(id)
+    for (const a of liveOnes) {
+      const prev = seen.current[a.id]
+      if (prev !== undefined && prev !== a.currentBid) {
+        setFlash(a.id)
+        setTimeout(() => setFlash((x) => (x === a.id ? null : x)), 1200)
+      }
+      seen.current[a.id] = a.currentBid
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [sig])
 
-  const placeBid = (a: Auction) => {
+  // Activity feed: latest bids across the top live auctions
+  useEffect(() => {
+    let stop = false
+    const load = async () => {
+      const all = await Promise.all(ids.split(',').filter(Boolean).map(async (id) => (await fetchBids(id)).slice(0, 5).map((b) => ({ id: b.id, auctionId: id, amount: b.amount, bidder: b.bidder, at: b.at, mine: !!user && b.userId === user.id }))))
+      if (!stop) setFeed(all.flat().sort((x, y) => y.at - x.at).slice(0, 12))
+    }
+    void load()
+    const t = setInterval(() => { if (!document.hidden) void load() }, 8000)
+    return () => { stop = true; clearInterval(t) }
+  }, [ids, user])
+
+  const placeBid = async (a: Auction) => {
     if (!loggedIn) return navigate(`/signin?next=${encodeURIComponent(route)}`)
-    record(a, (bids[a.id] ?? a.currentBid) + a.minBidIncrement, `${t('You')} (${user?.fullName.split(' ')[0]})`, true)
-    setNotice(t('Your bid of {amount} JOD was placed on {title}.', { amount: formatMoney((bids[a.id] ?? a.currentBid) + a.minBidIncrement), title: auction(a).title }))
+    setBusy(a.id)
+    const amount = a.currentBid + a.minBidIncrement
+    const r = await bidNow(a.id, amount)
+    setNotice(r.ok ? t('Your bid of {amount} JOD was placed on {title}.', { amount: formatMoney(amount), title: auction(a).title })
+      : r.code === 'deposit_required' ? t('Deposit is required to bid')
+      : r.code === 'not_verified' ? t('Your account must be verified before you can bid.')
+      : r.error)
+    await refresh()
+    setBusy(null)
   }
 
-  const list = useMemo(() => liveOnes.filter((a) => filter === 'all' || a.status === 'ending-soon'), [filter])
+  const list = liveOnes.filter((a) => filter === 'all' || a.status === 'ending-soon')
 
   return (
     <div className="min-h-screen bg-page">
@@ -89,7 +101,7 @@ export default function LiveBiddingPage({ route }: { route: string }) {
                   <span className="live-glow absolute top-3 start-3 flex items-center gap-1.5 rounded bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">
                     <LiveDot className="text-white" size={6} /> {t('LIVE')}
                   </span>
-                  <span className="absolute top-3 end-3 rounded bg-white/90 px-2 py-1 text-[10px] font-medium text-brand">{t('{n} bids', { n: counts[a.id] })}</span>
+                  <span className="absolute top-3 end-3 rounded bg-white/90 px-2 py-1 text-[10px] font-medium text-brand">{t('{n} bids', { n: a.bids })}</span>
                 </div>
                 <div className="p-4">
                   <h3 className="text-sm font-semibold text-ink">{l.title}</h3>
@@ -98,13 +110,13 @@ export default function LiveBiddingPage({ route }: { route: string }) {
                     <div>
                       <p className="text-[11px] text-muted">{t('Current Bid')}</p>
                       <p className={`text-[22px] font-semibold text-brand transition-transform ${flash === a.id ? 'scale-105' : ''}`}>
-                        {formatMoney(bids[a.id])} <span className="text-xs font-light text-icon">JOD</span>
+                        {formatMoney(a.currentBid)} <span className="text-xs font-light text-icon">JOD</span>
                       </p>
                     </div>
                     <CountdownTimer endsAt={a.endsAt} />
                   </div>
                   <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
-                    <button type="button" onClick={() => placeBid(a)} className="btn-shine rounded-lg bg-brand py-2.5 text-xs font-semibold text-white transition-colors hover:bg-brand-700">
+                    <button type="button" disabled={busy === a.id} onClick={() => placeBid(a)} className="btn-shine rounded-lg bg-brand py-2.5 text-xs font-semibold text-white transition-colors hover:bg-brand-700">
                       {t('Bid')} <bdi>+{formatMoney(a.minBidIncrement)} JOD</bdi>
                     </button>
                     <Link to={`/auctions/${a.id}`} className="rounded-lg border border-brand px-4 py-2.5 text-xs font-semibold text-brand hover:bg-brand-50">{t('Details')}</Link>
@@ -124,8 +136,8 @@ export default function LiveBiddingPage({ route }: { route: string }) {
             <ul className="mt-4 space-y-3">
               {feed.map((f) => (
                 <li key={f.id} className={`animate-pop-in rounded-lg px-3 py-2.5 text-xs ${f.mine ? 'bg-gold-50' : 'bg-brand-50'}`}>
-                  <p className="font-semibold text-ink">{f.bidder.startsWith('••') ? `${t('Bidder')} ${f.bidder}` : f.bidder} · <bdi>{formatMoney(f.amount)} JOD</bdi></p>
-                  <p className="mt-0.5 truncate text-muted">{auction(auctions.find((x) => x.id === f.auctionId)!).title}</p>
+                  <p className="font-semibold text-ink">{f.mine ? t('You') : f.bidder} · <bdi>{formatMoney(f.amount)} JOD</bdi></p>
+                  <p className="mt-0.5 truncate text-muted">{auction(auctions.find((x) => x.id === f.auctionId) ?? auctions[0]).title}</p>
                 </li>
               ))}
             </ul>

@@ -3,6 +3,8 @@ import { go } from './nav'
 import { AdminLayout } from './AdminLayout'
 import { AdminProvider, useAdmin } from './store'
 import AuctionForm from './pages/AuctionForm'
+import Bids from './pages/Bids'
+import Offers from './pages/Offers'
 import Auctions from './pages/Auctions'
 import Dashboard from './pages/Dashboard'
 import Login from './pages/Login'
@@ -38,6 +40,8 @@ function Inner({ route }: { route: string }) {
   else if (route === '/admin/submissions') page = <Submissions />
   else if ((d = m(/^\/admin\/submissions\/([^/]+)\/reject$/))) page = <SubmissionDetail id={d[1]} rejecting />
   else if ((d = m(/^\/admin\/submissions\/([^/]+)$/))) page = <SubmissionDetail id={d[1]} rejecting={false} />
+  else if (route === '/admin/bids') page = <Bids />
+  else if (route === '/admin/offers') page = <Offers />
   else if (route === '/admin/users') page = <Users />
   else if ((d = m(/^\/admin\/users\/([^/]+)$/))) page = <UserDetail id={d[1]} />
   else if (route === '/admin/transactions') page = <Transactions />

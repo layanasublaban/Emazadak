@@ -44,8 +44,8 @@ export default function SubmissionDetail({ id, rejecting }: { id: string; reject
           {pending && (
             <>
               <Button
-                onClick={() => {
-                  decideSubmission(s.id, 'Approved')
+                onClick={async () => {
+                  await decideSubmission(s.id, 'Approved')
                   notify(t('approvedToast'))
                   go('/admin/submissions')
                 }}
@@ -75,8 +75,8 @@ export default function SubmissionDetail({ id, rejecting }: { id: string; reject
               </LinkButton>
               <Button
                 kind="danger"
-                onClick={() => {
-                  decideSubmission(s.id, 'Rejected', reason.trim() || undefined)
+                onClick={async () => {
+                  await decideSubmission(s.id, 'Rejected', reason.trim() || undefined)
                   notify(t('rejectedToast'))
                   go('/admin/submissions')
                 }}

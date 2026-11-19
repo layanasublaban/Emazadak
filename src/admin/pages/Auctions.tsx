@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { jod } from '../data'
 import { useAdmin } from '../store'
-import { Badge, DataTable, LinkButton, PageHeader } from '../ui'
+import { Badge, Button, DataTable, LinkButton, PageHeader } from '../ui'
 
 const filters = ['All', 'Active', 'Upcoming', 'Ended'] as const
 
 export default function Auctions() {
-  const { t, loc, auctions, query } = useAdmin()
+  const { t, loc, auctions, query, deleteAuction, notify } = useAdmin()
   const [filter, setFilter] = useState<(typeof filters)[number]>('All')
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -42,7 +42,7 @@ export default function Auctions() {
           { header: t('endsIn'), width: 'w-28', cell: (a) => a.endsIn },
           {
             header: t('actions'),
-            width: 'w-40',
+            width: 'w-64',
             cell: (a) => (
               <div className="flex gap-2">
                 <LinkButton kind="outline" to={`/admin/auctions/${a.id}/edit`}>
@@ -51,6 +51,7 @@ export default function Auctions() {
                 <LinkButton kind="outline" to={`/admin/auctions/${a.id}/edit`}>
                   {t('edit')}
                 </LinkButton>
+                <Button kind="danger" onClick={async () => { if (window.confirm(`${t('delete')} #${a.id}?`)) { await deleteAuction(a.id); notify(t('delete')) } }}>{t('delete')}</Button>
               </div>
             ),
           },

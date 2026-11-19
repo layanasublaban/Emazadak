@@ -19,7 +19,7 @@ export default function AuctionForm({ id }: { id?: string }) {
   const [errs, setErrs] = useState<Partial<Record<keyof F, string>>>({})
   const set = (k: keyof F) => (e: ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value })
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: typeof errs = {}
     for (const k of ['title', 'type', 'start', 'end', 'location'] as const) if (!f[k].trim()) next[k] = t('required')
@@ -44,7 +44,7 @@ export default function AuctionForm({ id }: { id?: string }) {
       landSize: toN(f.size),
       description: f.desc,
     }
-    saveAuction(a)
+    if (!(await saveAuction(a))) return
     notify(existing ? t('updated') : t('published'))
     go('/admin/auctions')
   }

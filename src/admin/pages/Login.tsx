@@ -9,10 +9,10 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password) return setError(t('loginError'))
-    if (!login(email, password)) return setError(t('loginBad'))
+    if (!(await login(email, password))) return setError(t('loginBad'))
     go('/admin')
   }
 

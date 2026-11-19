@@ -125,7 +125,7 @@ const typeInfo: Record<PropertyType, { noun: string; category: string; desc: str
   },
 }
 
-export const auctions: Auction[] = Array.from({ length: 30 }, (_, i) => {
+const generated: Auction[] = Array.from({ length: 30 }, (_, i) => {
   const type = types[i % types.length]
   const info = typeInfo[type]
   const location = locationNames[(i * 3 + Math.floor(i / 5)) % locationNames.length]
@@ -170,6 +170,44 @@ export const auctions: Auction[] = Array.from({ length: 30 }, (_, i) => {
     bids: 4 + ((i * 5) % 37),
   }
 })
+
+/* ---------- Live data (from the API) ---------- */
+// `auctions` is mutated in place when fresh data arrives, so existing imports keep working.
+// Components re-render through useAuctionsVersion() (called once in App).
+export const auctions: Auction[] = [...generated]
+let version = 0
+const listeners = new Set<() => void>()
+export const subscribeAuctions = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } }
+export const auctionsVersion = () => version
+
+/** Turn an API auction (compact record) into the full website model. */
+export function normalizeAuction(r: Partial<Auction> & { id: string }): Auction {
+  const info = typeInfo[(r.type as PropertyType) ?? 'Residential Property'] ?? typeInfo['Residential Property']
+  const status = (r.status as AuctionStatus) ?? 'coming-soon'
+  const chip = r.chip ?? (status === 'live' ? 'Running Now' : status === 'ending-soon' ? 'Ending Soon' : status === 'finished' ? 'Closed' : info.category === 'Land' ? 'Land' : 'Coming Soon')
+  const code = r.code ?? `#A ${r.id.replace(/^A/, '')}`
+  const price = Number(r.startingPrice ?? 0)
+  return {
+    code, chip, status,
+    title: r.title ?? 'Property', location: r.location ?? '', area: r.area ?? '',
+    lat: Number(r.lat ?? 31.95), lng: Number(r.lng ?? 35.9),
+    category: r.category ?? info.category,
+    description: r.description || info.desc,
+    image: r.image ?? artImage(r.id, 0),
+    gallery: r.gallery?.length ? r.gallery : [0, 1, 2].map((v) => artImage(r.id, v)),
+    originalPrice: Number(r.originalPrice ?? 12_500), initialPrice: Number(r.initialPrice ?? 12_500),
+    marketPrice: Number(r.marketPrice ?? price), startingPrice: price,
+    currentBid: Number(r.currentBid ?? price), minBidIncrement: Number(r.minBidIncrement ?? 12_500),
+    endsAt: Number(r.endsAt ?? Date.now()), type: (r.type as PropertyType) ?? 'Residential Property',
+    landSize: Number(r.landSize ?? 0), directOffer: !!r.directOffer, bids: Number(r.bids ?? 0), id: r.id,
+  }
+}
+
+export function setAuctions(list: Auction[]) {
+  auctions.splice(0, auctions.length, ...list)
+  version++
+  listeners.forEach((l) => l())
+}
 
 export const getAuction = (id: string) => auctions.find((a) => a.id === id) ?? auctions[0]
 

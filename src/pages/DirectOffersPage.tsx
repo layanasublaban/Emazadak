@@ -9,6 +9,7 @@ import { SearchIcon } from '@/components/Icons'
 import { useI18n } from '@/lib/i18n'
 import { Link, navigate } from '@/lib/router'
 import { useAuth } from '@/lib/auth'
+import { makeOffer } from '@/lib/actions'
 
 interface Offer {
   id: string
@@ -16,38 +17,28 @@ interface Offer {
   amount: number
   message: string
   at: number
-  status: 'Pending'
+  status: string
 }
 
-const KEY = 'emazadak.offers'
-const loadOffers = (): Offer[] => {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '[]')
-  } catch {
-    return []
-  }
-}
-
-const direct = auctions.filter((a) => a.directOffer && a.status !== 'finished')
 const askingPrice = (a: Auction) => a.currentBid + 25_000
 
 export default function DirectOffersPage({ route }: { route: string }) {
-  const { loggedIn, user } = useAuth()
+  const { loggedIn, state, refresh } = useAuth()
   const { t, auction, lang } = useI18n()
+  const direct = auctions.filter((a) => a.directOffer && a.status !== 'finished')
   const [q, setQ] = useState('')
   const [location, setLocation] = useState('')
   const [sort, setSort] = useState<'new' | 'low' | 'high'>('new')
   const [target, setTarget] = useState<Auction | null>(null)
-  const [offers, setOffers] = useState<Offer[]>([])
-  useEffect(() => setOffers(loadOffers()), [])
 
   const list = useMemo(() => {
     const r = searchAuctions(q, direct).filter((a) => !location || a.location === location)
     return sort === 'low' ? [...r].sort((a, b) => askingPrice(a) - askingPrice(b)) : sort === 'high' ? [...r].sort((a, b) => askingPrice(b) - askingPrice(a)) : r
-  }, [q, location, sort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, location, sort, direct.map((a) => a.id + a.currentBid).join()])
 
   const open = (a: Auction) => (loggedIn ? setTarget(a) : navigate(`/signin?next=${encodeURIComponent(route)}`))
-  const mine = user ? offers : []
+  const mine: Offer[] = loggedIn ? state.offers.map((o) => ({ id: String(o.id), auctionId: o.auctionId, amount: o.amount, message: '', at: o.at, status: o.status })) : []
 
   return (
     <div className="min-h-screen bg-page">
@@ -129,14 +120,10 @@ export default function DirectOffersPage({ route }: { route: string }) {
         <OfferModal
           auction={target}
           onClose={() => setTarget(null)}
-          onSubmit={(o) => {
-            const next = [o, ...offers]
-            setOffers(next)
-            try {
-              localStorage.setItem(KEY, JSON.stringify(next))
-            } catch {
-              /* ignore */
-            }
+          onSubmit={async (o) => {
+            const r = await makeOffer(o.auctionId, o.amount)
+            if (r.ok) await refresh()
+            return r.ok ? '' : r.error
           }}
         />
       )}
@@ -145,7 +132,7 @@ export default function DirectOffersPage({ route }: { route: string }) {
   )
 }
 
-function OfferModal({ auction: a, onClose, onSubmit }: { auction: Auction; onClose: () => void; onSubmit: (o: Offer) => void }) {
+function OfferModal({ auction: a, onClose, onSubmit }: { auction: Auction; onClose: () => void; onSubmit: (o: Offer) => Promise<string> }) {
   const { t, auction } = useI18n()
   const asking = askingPrice(a)
   const min = Math.round(asking * 0.8)
@@ -160,12 +147,13 @@ function OfferModal({ auction: a, onClose, onSubmit }: { auction: Auction; onClo
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const n = Number(amount)
     if (!n || n < min) return setError(t('Your offer must be at least {min} JOD (80% of the asking price).', { min: formatMoney(min) }))
     if (n > asking * 1.5) return setError(t('That amount is far above the asking price – please check it.'))
-    onSubmit({ id: `O${Date.now()}`, auctionId: a.id, amount: n, message, at: Date.now(), status: 'Pending' })
+    const err = await onSubmit({ id: '', auctionId: a.id, amount: n, message, at: Date.now(), status: 'Pending' })
+    if (err) return setError(err)
     setDone(true)
   }
 

@@ -9,6 +9,8 @@ const nav: { key: Key; to: string; icon: typeof DashboardIcon }[] = [
   { key: 'dashboard', to: '/admin', icon: DashboardIcon },
   { key: 'auctions', to: '/admin/auctions', icon: GavelIcon },
   { key: 'submissions', to: '/admin/submissions', icon: FileTextIcon },
+  { key: 'bids', to: '/admin/bids', icon: GavelIcon },
+  { key: 'offers', to: '/admin/offers', icon: FileTextIcon },
   { key: 'users', to: '/admin/users', icon: UsersIcon },
   { key: 'transactions', to: '/admin/transactions', icon: WalletIcon },
   { key: 'settings', to: '/admin/settings', icon: SettingsIcon },

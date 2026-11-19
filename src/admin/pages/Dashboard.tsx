@@ -3,7 +3,7 @@ import { useAdmin } from '../store'
 import { Badge, Card, DataTable, LinkButton, PageHeader } from '../ui'
 
 export default function Dashboard() {
-  const { t, loc, auctions, submissions, users, transactions } = useAdmin()
+  const { t, loc, auctions, submissions, users, transactions, summary } = useAdmin()
   const active = auctions.filter((a) => a.status === 'Active').length
   const pending = submissions.filter((s) => s.status === 'Pending').length
   const deposits = transactions.filter((x) => x.type === 'Deposit' && x.status === 'Completed').reduce((n, x) => n + x.amount, 0)
@@ -12,6 +12,9 @@ export default function Dashboard() {
     { label: t('pendingSubmissions'), value: String(pending) },
     { label: t('registeredUsers'), value: users.length.toLocaleString('en-US') },
     { label: t('totalDeposits'), value: jod(deposits) },
+    { label: t('pendingUsers'), value: String(users.filter((u) => !u.verified && !u.suspended).length) },
+    { label: t('totalBids'), value: String(summary.counts.bids ?? 0) },
+    { label: t('pendingOffers'), value: String(summary.counts.pending_offers ?? 0) },
   ]
   return (
     <>
@@ -24,6 +27,19 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+      <h2 className="text-lg font-semibold text-black">{t('liveFeed')}</h2>
+      <Card className="p-0">
+        {summary.events.length === 0 ? <p className="p-5 text-sm text-street">{t('noActivity')}</p> : (
+          <ul className="divide-y divide-black/5">
+            {summary.events.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
+                <span><b className="text-brand">{e.kind.replace(/_/g, ' ')}</b> <span className="text-street">#{e.ref}</span>{typeof e.detail?.amount === 'number' ? ` · ${jod(e.detail.amount as number)}` : ''}{typeof e.detail?.title === 'string' ? ` · ${e.detail.title}` : ''}</span>
+                <span className="text-xs text-street" dir="ltr">{new Date(e.at).toLocaleString('en-GB')}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
       <h2 className="text-lg font-semibold text-black">{t('recentAuctions')}</h2>
       <DataTable
         rows={auctions.slice(0, 5)}

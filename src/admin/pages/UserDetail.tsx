@@ -1,12 +1,12 @@
-import { activityFor, jod } from '../data'
+import { jod } from '../data'
 import { useAdmin } from '../store'
 import { Badge, Button, Card, DataTable, LinkButton, PageHeader } from '../ui'
 
 export default function UserDetail({ id }: { id: string }) {
-  const { t, loc, users, toggleSuspend, notify } = useAdmin()
+  const { t, loc, users, toggleSuspend, setVerified, bids, notify } = useAdmin()
   const u = users.find((x) => x.id === id)
   if (!u) return <PageHeader title={t('noResults')} sub="" action={<LinkButton to="/admin/users" kind="outline">{t('backToUsers')}</LinkButton>} />
-  const rows = activityFor(u.id).map((a, i) => ({ ...a, id: String(i) }))
+  const rows = bids.filter((b) => b.email === u.email).slice(0, 20).map((b) => ({ id: b.id, auctionId: b.auctionId, action: 'placedBid' as const, amount: b.amount, date: b.date }))
   const stats = [
     { l: t('bidsPlaced'), v: String(u.bids) },
     { l: t('auctionsWon'), v: String(u.won) },
@@ -27,12 +27,15 @@ export default function UserDetail({ id }: { id: string }) {
         <Badge status={u.suspended ? 'Suspended' : u.verified ? 'Verified' : 'Unverified'} />
         <Button
           kind={u.suspended ? 'primary' : 'danger'}
-          onClick={() => {
-            toggleSuspend(u.id)
+          onClick={async () => {
+            await toggleSuspend(u.id)
             notify(u.suspended ? t('reactivatedToast') : t('suspendedToast'))
           }}
         >
           {u.suspended ? t('reactivate') : t('suspend')}
+        </Button>
+        <Button kind={u.verified ? 'outline' : 'primary'} onClick={async () => { await setVerified(u.id, !u.verified); notify(u.verified ? t('unverifyUser') : t('verifyUser')) }}>
+          {u.verified ? t('unverifyUser') : t('verifyUser')}
         </Button>
         <LinkButton kind="outline" to="/admin/users">
           {t('backToUsers')}

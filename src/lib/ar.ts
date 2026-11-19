@@ -82,6 +82,7 @@ export const AR: Record<string, string> = {
   'Pay Deposit': 'ادفع التأمين',
   'Please Login to pay deposit': 'يرجى تسجيل الدخول لدفع التأمين',
   'Deposit is required to bid': 'التأمين مطلوب للمزايدة',
+  'Your account must be verified before you can bid.': 'يجب توثيق حسابك قبل أن تتمكن من المزايدة.',
   'This auction has ended': 'انتهى هذا المزاد',
   'Time remaining': 'الوقت المتبقي',
   Days: 'أيام', Hours: 'ساعات', Minutes: 'دقائق', Seconds: 'ثواني',

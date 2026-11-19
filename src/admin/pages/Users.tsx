@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { useAdmin } from '../store'
-import { Badge, DataTable, LinkButton, PageHeader } from '../ui'
+import { Badge, Button, DataTable, LinkButton, PageHeader } from '../ui'
 
 export default function Users() {
-  const { t, loc, users, query } = useAdmin()
+  const { t, loc, users, query, setVerified, notify } = useAdmin()
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return users.filter((u) => !q || u.name.en.toLowerCase().includes(q) || u.name.ar.includes(q) || u.email.includes(q) || u.id.toLowerCase().includes(q))
@@ -18,7 +18,7 @@ export default function Users() {
           { header: t('email'), cell: (u) => <span dir="ltr">{u.email}</span> },
           { header: t('phone'), width: 'w-44', cell: (u) => <span dir="ltr">{u.phone}</span> },
           { header: t('status'), width: 'w-36', cell: (u) => <Badge status={u.suspended ? 'Suspended' : u.verified ? 'Verified' : 'Unverified'} /> },
-          { header: t('actions'), width: 'w-28', cell: (u) => <LinkButton kind="outline" to={`/admin/users/${u.id}`}>{t('view')}</LinkButton> },
+          { header: t('actions'), width: 'w-56', cell: (u) => <div className="flex gap-2">{!u.verified && !u.suspended && <Button onClick={async () => { await setVerified(u.id, true); notify(t('verifyUser')) }}>{t('verifyUser')}</Button>}<LinkButton kind="outline" to={`/admin/users/${u.id}`}>{t('view')}</LinkButton></div> },
         ]}
       />
     </>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { auctions, formatMoney } from '@/data/auctions'
+import { auctionsVersion, auctions, formatMoney } from '@/data/auctions'
 import { useI18n } from '@/lib/i18n'
 import { Link } from '@/lib/router'
 import { DEAD_SEA, OUTLINE, VIEW, project, toPath } from '@/lib/jordan'
@@ -18,7 +18,7 @@ const cityOf = (loc: string) => loc.replace(/ (West|East)$/, '')
 /** Modern replacement for the old "View Live Auctions on Map" shortcut: dark map card with glowing live pins. */
 export function HomeMapBanner() {
   const { t, lang, auction } = useI18n()
-  const active = useMemo(() => auctions.filter((a) => a.status !== 'finished'), [])
+  const active = useMemo(() => auctions.filter((a) => a.status !== 'finished'), [auctionsVersion()])
   const live = useMemo(() => active.filter((a) => a.status === 'live' || a.status === 'ending-soon'), [active])
   const ending = live.filter((a) => a.status === 'ending-soon').length
 

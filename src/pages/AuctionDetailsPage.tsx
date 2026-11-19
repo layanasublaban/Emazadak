@@ -10,6 +10,7 @@ import { EmbedMap, GoogleMap, googleMapsLink, hasMapsKey } from '@/components/Go
 import { useI18n } from '@/lib/i18n'
 import { Link, navigate } from '@/lib/router'
 import { useAuth } from '@/lib/auth'
+import { payDeposit, placeBid } from '@/lib/actions'
 
 type DetailTab = 'Overview' | 'Specs' | 'Documents'
 const detailTabs: DetailTab[] = ['Overview', 'Specs', 'Documents']
@@ -27,16 +28,32 @@ export default function AuctionDetailsPage({ id, route }: { id: string; route: s
   const a = getAuction(id)
   const { t, auction, rtl } = useI18n()
   const loc = auction(a)
-  const { loggedIn } = useAuth()
+  const { loggedIn, user, state, refresh } = useAuth()
   const [imageIndex, setImageIndex] = useState(0)
   const [tab, setTab] = useState<DetailTab>('Overview')
   const [liked, setLiked] = useState(false)
-  const [depositPaid, setDepositPaid] = useState(false)
-  const [currentBid, setCurrentBid] = useState(a.currentBid)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const depositPaid = state.deposits.includes(a.id)
+  const currentBid = a.currentBid
+  const verified = user?.verification === 'verified'
+  const errText: Record<string, string> = {
+    not_verified: 'Your account must be verified before you can bid.',
+    deposit_required: 'Deposit is required to bid',
+    too_low: 'Your bid is below the minimum. Please try again.',
+    closed: 'This auction has ended',
+  }
+  const run = async (fn: () => ReturnType<typeof payDeposit>, okText: string) => {
+    setBusy(true); setNotice(null)
+    const r = await fn()
+    setNotice(r.ok ? { ok: true, text: okText } : { ok: false, text: errText[r.code] ? t(errText[r.code]) : r.error })
+    await refresh()
+    setBusy(false)
+  }
 
   const badge: BadgeKind = a.status === 'coming-soon' ? 'coming-soon' : a.status === 'ending-soon' ? 'live-ending' : a.status === 'finished' ? 'finished' : 'live'
-  const canPayDeposit = loggedIn && !depositPaid
-  const canBid = loggedIn && depositPaid && a.status !== 'finished'
+  const canPayDeposit = loggedIn && !depositPaid && !busy && a.status !== 'finished'
+  const canBid = loggedIn && depositPaid && a.status !== 'finished' && a.status !== 'coming-soon' && !busy
 
   const prev = () => setImageIndex((i) => (i - 1 + a.gallery.length) % a.gallery.length)
   const next = () => setImageIndex((i) => (i + 1) % a.gallery.length)
@@ -135,7 +152,7 @@ export default function AuctionDetailsPage({ id, route }: { id: string; route: s
               <h2 className="border-b border-black/10 pb-3 text-center text-xl text-ink sm:text-[26px]">{t('Deposit Status')}</h2>
               <div className={`mt-5 rounded-md py-3.5 text-center text-lg sm:text-xl ${depositPaid ? 'bg-[#e6f4ea] text-[#2e7d32]' : 'bg-[#f9e6e6] text-[#d0021b]'}`}>{depositPaid ? t('Deposit Paid') : t('Deposit Required')}</div>
               {!loggedIn && <p className="mt-4 text-sm text-ink">*{t('Please Login to pay deposit')} – <Link to="/signin" className="font-semibold text-brand underline">{t('Sign In')}</Link> / <Link to="/signup" className="font-semibold text-brand underline">{t('Sign Up')}</Link></p>}
-              <button type="button" aria-disabled={!canPayDeposit} disabled={loggedIn && !canPayDeposit} onClick={() => (loggedIn ? setDepositPaid(true) : navigate('/signin'))} className={`mt-6 w-full rounded-md py-3.5 text-lg font-medium transition-colors sm:py-4 sm:text-xl ${loggedIn && canPayDeposit ? 'btn-shine bg-brand text-white hover:bg-brand-700' : 'bg-[#d0d0d0] text-white/90'} ${!loggedIn ? 'cursor-pointer hover:bg-[#c4c4c4]' : ''}`}>{t('Pay Deposit')}</button>
+              <button type="button" aria-disabled={!canPayDeposit} disabled={loggedIn && !canPayDeposit} onClick={() => (loggedIn ? run(() => payDeposit(a.id), t('Deposit Paid')) : navigate('/signin'))} className={`mt-6 w-full rounded-md py-3.5 text-lg font-medium transition-colors sm:py-4 sm:text-xl ${loggedIn && canPayDeposit ? 'btn-shine bg-brand text-white hover:bg-brand-700' : 'bg-[#d0d0d0] text-white/90'} ${!loggedIn ? 'cursor-pointer hover:bg-[#c4c4c4]' : ''}`}>{t('Pay Deposit')}</button>
             </section>
 
             <section className="rounded-lg border border-black/10 bg-white p-5 shadow-sm sm:p-6">
@@ -156,7 +173,9 @@ export default function AuctionDetailsPage({ id, route }: { id: string; route: s
                 <div className="mt-3"><CountdownTimer endsAt={a.endsAt} size="lg" /></div>
               </div>
 
-              <button type="button" disabled={loggedIn && !canBid} onClick={() => (loggedIn ? setCurrentBid((b) => b + a.minBidIncrement) : navigate('/signin'))} className={`mt-8 w-full rounded-md py-3.5 text-lg font-medium transition-colors sm:py-4 sm:text-xl ${loggedIn && canBid ? 'btn-shine bg-brand text-white hover:bg-brand-700' : 'bg-[#cfcfcf] text-white/90'} ${!loggedIn ? 'cursor-pointer hover:bg-[#c4c4c4]' : ''}`}>{t('Place Bid')}</button>
+              <button type="button" disabled={loggedIn && !canBid} onClick={() => (loggedIn ? run(() => placeBid(a.id, currentBid + a.minBidIncrement), t('Place Bid') + ' ✓') : navigate('/signin'))} className={`mt-8 w-full rounded-md py-3.5 text-lg font-medium transition-colors sm:py-4 sm:text-xl ${loggedIn && canBid ? 'btn-shine bg-brand text-white hover:bg-brand-700' : 'bg-[#cfcfcf] text-white/90'} ${!loggedIn ? 'cursor-pointer hover:bg-[#c4c4c4]' : ''}`}>{t('Place Bid')}</button>
+              {notice && <p role="status" className={`mt-4 text-sm font-medium ${notice.ok ? 'text-[#2e7d32]' : 'text-[#d0021b]'}`}>{notice.text}</p>}
+              {loggedIn && !verified && <p className="mt-2 text-sm text-ink">*{t('Your account must be verified before you can bid.')}</p>}
               {(!loggedIn || !canBid) && <p className="mt-4 text-sm text-ink">*{t(a.status === 'finished' ? 'This auction has ended' : !loggedIn ? 'Please Login to pay deposit' : 'Deposit is required to bid')}</p>}
             </section>
           </aside>

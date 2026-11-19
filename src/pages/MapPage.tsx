@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { auctions, formatMoney } from '@/data/auctions'
+import { auctionsVersion, auctions, formatMoney } from '@/data/auctions'
 import { Footer } from '@/components/Footer'
 import { Navbar } from '@/components/Navbar'
 import { PageHeader } from '@/components/PageHeader'
@@ -39,7 +39,7 @@ export default function MapPage({ route }: { route: string }) {
   const path = (pts: [number, number][]) => pts.map(([lng, lat], i) => `${i ? 'L' : 'M'}${pt(lng, lat).x.toFixed(1)},${pt(lng, lat).y.toFixed(1)}`).join('') + 'Z'
   const place = (k: string) => (lang === 'ar' ? AR_AREAS[k] ?? AR_LOCATIONS[k] ?? AR[k] ?? k : k)
 
-  const visible = useMemo(() => auctions.filter((a) => a.status !== 'finished' && (status === 'all' || a.status === status)), [status])
+  const visible = useMemo(() => auctions.filter((a) => a.status !== 'finished' && (status === 'all' || a.status === status)), [status, auctionsVersion()])
   const groups = useMemo(() => {
     const m = new Map<string, { area: string; lat: number; lng: number; items: typeof auctions; live: number }>()
     for (const a of visible) {

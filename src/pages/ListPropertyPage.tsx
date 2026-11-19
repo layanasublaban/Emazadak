@@ -6,6 +6,7 @@ import type { PropertyType } from '@/data/auctions'
 import { useI18n } from '@/lib/i18n'
 import { Link } from '@/lib/router'
 import { useAuth } from '@/lib/auth'
+import { submitProperty } from '@/lib/actions'
 
 const types: PropertyType[] = ['Residential Property', 'Residential Apartment', 'Residential Building', 'Vacant Residential Land Plot', 'Vacant Commercial Land Plot', 'Commercial Complex', 'Industrial Land Plot', 'Factory']
 const cities = ['Amman West', 'Amman East', 'Zarqa', 'Irbid', 'Aqaba', 'Salt', 'Madaba', 'Karak', 'Jerash']
@@ -70,7 +71,7 @@ function check(step: number, d: Draft): Record<string, string> {
 }
 
 export default function ListPropertyPage({ route }: { route: string }) {
-  const { loggedIn, user } = useAuth()
+  const { loggedIn, refresh } = useAuth()
   const { t } = useI18n()
   const [step, setStep] = useState(0)
   const [d, setD] = useState<Draft>(empty)
@@ -92,18 +93,18 @@ export default function ListPropertyPage({ route }: { route: string }) {
     setErrors(e)
     if (!Object.keys(e).length) setStep((s) => s + 1)
   }
-  const submit = () => {
+  const [sending, setSending] = useState(false)
+  const submit = async () => {
     const e = check(3, d)
     setErrors(e)
-    if (Object.keys(e).length) return
-    const id = `L-${Date.now().toString().slice(-6)}`
-    try {
-      const prev = JSON.parse(localStorage.getItem(KEY) ?? '[]')
-      localStorage.setItem(KEY, JSON.stringify([...prev, { id, owner: user?.email, ...d, photos: d.photos.map((p) => p.name), deed: d.deed?.name, at: Date.now() }]))
-    } catch {
-      /* ignore */
-    }
-    setRef(id)
+    if (Object.keys(e).length || sending) return
+    setSending(true)
+    const { photos, deed, ...rest } = d
+    const r = await submitProperty({ ...rest, photos: photos.map((p) => p.name), deed: deed?.name })
+    setSending(false)
+    if (!r.ok) return setErrors({ submit: r.error })
+    await refresh()
+    setRef(String((r.data as { id?: string })?.id ?? `L-${Date.now().toString().slice(-6)}`))
   }
 
   return (
@@ -210,6 +211,7 @@ export default function ListPropertyPage({ route }: { route: string }) {
                   <span>{t('I confirm I am the owner or authorised to sell this property, the information is accurate, and I accept Emazadak’s seller terms and commission.')}</span>
                 </label>
                 {errors.agree && <p role="alert" className="text-[11px] text-red-600">{t(errors.agree)}</p>}
+                {errors.submit && <p role="alert" className="text-xs text-red-600">{errors.submit}</p>}
               </div>
             )}
 

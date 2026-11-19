@@ -1,3 +1,4 @@
+import { useAuctionsSync } from '@/lib/useAuctionsSync'
 import AdminApp from '@/admin/AdminApp'
 import { AuthProvider } from '@/lib/auth'
 import { LangProvider } from '@/lib/i18n'
@@ -22,6 +23,7 @@ import HomePage from '@/pages/HomePage'
  */
 function Routes() {
   const route = useHashRoute()
+  useAuctionsSync() // re-renders on fresh server data
   if (route.startsWith('/admin')) return <AdminApp route={route} />
   const details = route.match(/^\/auctions\/([^/]+)$/)
 
