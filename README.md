@@ -13,3 +13,29 @@ Homepage, Auctions list and Auction details pages. Export the images listed in
 Hash routes under `#/admin` (login: `admin@emazadak.com` / `admin123`), English and Arabic (RTL),
 code in `src/admin`. Menu and footer of the public site now match the Figma pages.
 See `QA_REPORT.md` for the quality review.
+
+
+## Public website pages (Nov 2026 update)
+
+| Route | Page |
+|---|---|
+| `#/` | Home – rotating hero photos, working search (suggestions + results), animated ads, featured auctions |
+| `#/auctions?q=` | Auctions list; the `q` param is the search query (English or Arabic keywords) |
+| `#/live-bidding` | Live bidding room (simulated competing bids until the backend is connected) |
+| `#/offers` | Direct offers with a "Place offer" dialog |
+| `#/map` | Schematic Jordan map with auction areas |
+| `#/list-property` | 4-step seller form (requires sign-in) |
+| `#/signin`, `#/signup` | Website accounts (stored in the browser until a backend exists – replace `signIn`/`signUp` in `src/lib/auth.tsx` with API calls) |
+
+The header (`src/components/Navbar.tsx`) is a single component used on every page, measured from the Figma Header component.
+
+
+## Mobile, Arabic, Google Maps & motion (Nov 2026 update)
+
+- **Responsive / mobile-first**: every public page works from 360px up. The navbar collapses to a hamburger panel below `xl`; card rows become swipeable, filters collapse behind a button, grids stack. Safe to reuse the same design tokens for the mobile app.
+- **Arabic (RTL)**: switch with the `EN / العربية` button in the header (saved in `localStorage`, sets `<html lang dir>`). Font is **Tajawal** from the brand guide (`--font-arabic`). UI strings live in `src/lib/ar.ts` (keys are the English text used in `t('…')`; `{n}` placeholders supported). Property data is translated through `AR_AREAS / AR_LOCATIONS / AR_NOUNS / AR_TYPES / AR_DESC`. Layout uses logical utilities (`start-/end-/ps-/pe-`) so it mirrors automatically. The admin panel keeps its own EN/AR dictionary.
+- **Google Maps**: set `VITE_GOOGLE_MAPS_API_KEY` in `.env` (enable *Maps JavaScript API*). With a key, `#/map` and the details page use the real Google map with custom pins (red pulsing ring = live auction, green = upcoming, grey = ended). Without a key the map page shows the built-in schematic map and the details page uses Google's keyless embed, so nothing breaks.
+- **Live status**: pulsing `LiveDot`, glowing red LIVE badges on cards, pulsing pins on every map area that has a live auction, "N auctions live right now" counters (`src/components/LiveDot.tsx`, `HomeMapBanner.tsx`).
+- **Homepage map banner**: redesigned dark-green panel with glowing live pins, live / ending-soon / property counters and a featured live card.
+- **Motion**: scroll reveal (`Reveal.tsx`), Ken-Burns hero, card hover lift, shine on buttons, count-down flip, pop-in feed, floating phone mock. All respect `prefers-reduced-motion`.
+- **Images & video**: all real photos – see `public/images/README.md` for the exact file names to upload (30 auctions × 3 photos, ads, sign-in). Hero background video: `public/videos/hero.mp4` (fallback: AI clip URL in `src/lib/media.ts`).
