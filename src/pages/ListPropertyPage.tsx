@@ -31,7 +31,6 @@ interface Draft {
   agree: boolean
 }
 const empty: Draft = { type: '', title: '', city: '', area: '', landSize: '', bedrooms: '', description: '', saleType: 'auction', startingPrice: '', marketPrice: '', duration: '14', deedNumber: '', ownerName: '', photos: [], deed: null, agree: false }
-const KEY = 'emazadak.listings'
 
 const cls = (e?: string) => `w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 ${e ? 'border-red-400 focus:ring-red-200' : 'border-black/15 focus:border-brand focus:ring-brand/20'}`
 function F({ label, error, children, hint }: { label: string; error?: string; children: React.ReactNode; hint?: string }) {
@@ -71,7 +70,7 @@ function check(step: number, d: Draft): Record<string, string> {
 }
 
 export default function ListPropertyPage({ route }: { route: string }) {
-  const { loggedIn, refresh } = useAuth()
+  const { loggedIn, user, refresh } = useAuth()
   const { t } = useI18n()
   const [step, setStep] = useState(0)
   const [d, setD] = useState<Draft>(empty)

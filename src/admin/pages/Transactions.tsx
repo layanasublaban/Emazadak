@@ -9,7 +9,7 @@ export default function Transactions() {
     const q = query.trim().toLowerCase()
     return transactions.filter((x) => {
       const u = users.find((v) => v.id === x.userId)
-      return !q || x.id.toLowerCase().includes(q) || (x as { email?: string }).email?.toLowerCase().includes(q) || (u && (u.name.en.toLowerCase().includes(q) || u.name.ar.includes(q)))
+      return !q || x.id.toLowerCase().includes(q) || (u && (u.name.en.toLowerCase().includes(q) || u.name.ar.includes(q)))
     })
   }, [transactions, users, query])
   return (
